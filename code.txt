@@ -1,0 +1,274 @@
+import os
+base_dir = 'C:\\Users\\Solayman\\Downloads\\ich\\ICH_Volumn\\masks'
+os.listdir(base_dir);
+
+------------------------------
+
+import os
+import re
+import plotly.graph_objs as go
+from PIL import Image
+import numpy as np
+
+# Set path to folder containing images
+folder_path = "masks"
+
+# Define target size for resizing
+target_size = (256, 256)
+
+# Define the size of the space between slices
+slice_spacing = 1.0
+
+# Define threshold value for identifying defect
+threshold = 200
+
+# Define color for the defect region
+defect_color = 'red'
+
+# Get list of image filenames and sort them in numerical order
+file_list = os.listdir(folder_path)
+file_list.sort(key=lambda x: int(re.findall(r'\d+', x)[0]))
+
+# Create list of surfaces for each slice
+surfaces = []
+for i, file_name in enumerate(file_list):
+    # Load image and resize to target size
+    im = Image.open(os.path.join(folder_path, file_name)).resize(target_size)
+
+    # Create binary mask of defect region
+    mask = np.array(im.convert('L')) < threshold
+
+    # Create surface for current slice with only the defect region and set the non-defect region to be transparent
+    r, c = im.size
+    surface = go.Surface(
+        z=i * slice_spacing * np.ones((r, c)),
+        surfacecolor=np.ma.masked_array(np.flipud(np.array(im)), np.invert(mask)),
+        cmin=0,
+        cmax=255,
+        showscale=False,
+        colorscale=[[0, 'rgba(0,0,0,0)'], [1, 'red']],  # Use custom colorscale with red for defect area
+        opacity=0.8  # Change opacity to a float value
+    )
+
+    surfaces.append(surface)
+
+# Create figure and add surfaces
+fig = go.Figure(data=surfaces)
+
+# Set layout and axis labels
+fig.update_layout(
+    title='CT Slices Stacked in Z-axis',
+    scene=dict(
+        xaxis_title='X',
+        yaxis_title='Y',
+        zaxis_title='Z',
+        aspectratio=dict(x=1, y=1, z=1)
+    )
+)
+
+# Show figure
+fig.show()
+
+import plotly.express as px
+
+fig.write_html("file.html")
+
+
+---------------------------------------
+
+import os
+import math
+import cv2
+from skimage.measure import label, regionprops
+import matplotlib.pyplot as plt
+
+def calculate_ich_volume(a, b, c):
+    """
+    Calculates the volume of an intracerebral hemorrhage (ICH) using the ABC/2 method.
+    
+    Parameters:
+        a (float): The longest diameter (A) of the ICH.
+        b (float): The largest perpendicular diameter (B) of the ICH.
+        c (float): The approximate depth (C) of the ICH.
+    
+    Returns:
+        float: The volume of the ICH in the same unit as the measurements.
+    """
+    #volume = (math.pi * a * b * c) / 2
+    volume = (a * b * c) / 2
+    return volume
+
+# Path to the folder containing the mask images
+folder_path = "masks"
+
+# Get a list of all the files in the folder
+files = os.listdir(folder_path)
+num_slices_with_hemorrhage = 0
+
+
+slice_thickness = 5.0  # Slice thickness in mm
+pixel_size = 0.5  # Pixel size in mm
+slice_gap = 0.0  # Slice gap in mm
+
+A, B = [], []
+
+# Loop through the files in the folder
+for file_name in files:
+    # Read the mask image
+    image_path = os.path.join(folder_path, file_name)
+    mask_image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+    
+    # Perform image processing operations (e.g., thresholding, contour extraction, etc.)
+    # Convert the image to binary using thresholding
+    _, binary_image = cv2.threshold(mask_image, 127, 255, cv2.THRESH_BINARY)
+    
+    # Find contours in the binary image
+    contours, _ = cv2.findContours(binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    
+    # Proceed if at least one contour is found
+    if len(contours) > 0:
+        num_slices_with_hemorrhage = num_slices_with_hemorrhage + 1
+        # Find the largest contour
+        largest_contour = max(contours, key=cv2.contourArea)
+        
+        # Fit an ellipse to the largest contour
+        (x, y), (a, b), angle = cv2.fitEllipse(largest_contour)
+        A.append(a)
+        B.append(b)
+        
+       
+print('NSlices with Hemorrhage:', num_slices_with_hemorrhage)        
+a = max(A) * pixel_size
+print("a:", a)
+b =  max(B) * pixel_size
+c = slice_thickness * num_slices_with_hemorrhage
+print("c:", c)
+# Calculate the ICH volume
+ich_volume = calculate_ich_volume(a, b, c)
+        
+     
+print("ICH Volume:", ich_volume, "mm^3")
+print("ICH Volume:", ich_volume/1000, "cm^3")
+
+--------------------------------------------
+## Kothari ABC/2 method
+
+import os
+import math
+import cv2
+from skimage.measure import label, regionprops
+import matplotlib.pyplot as plt
+
+
+def calculate_ich_volume(a, b, c):
+    """
+    Calculates the volume of an intracerebral hemorrhage (ICH) using the ABC/2 method.
+    
+    Parameters:
+        a (float): The longest diameter (A) of the ICH.
+        b (float): The largest perpendicular diameter (B) of the ICH.
+        c (float): The approximate depth (C) of the ICH.
+    
+    Returns:
+        float: The volume of the ICH in the same unit as the measurements.
+    """
+    #volume = (math.pi * a * b * c) / 2
+    volume = (a * b * c) / 2
+    return volume
+
+# Path to the folder containing the mask images
+folder_path = "masks"
+
+# Get a list of all the files in the folder
+files = os.listdir(folder_path)
+num_slices_with_hemorrhage = 0
+
+
+slice_thickness = 5.0  # Slice thickness in mm
+slice_gap = 0.0  # Slice gap in mm
+pixel_size = 0.5  # Pixel size in mm
+
+A, B = [], []
+C = 0
+
+# Loop through the files in the folder
+for file_name in files:
+    # Read the mask image
+    image_path = os.path.join(folder_path, file_name)
+    mask_image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+    
+    # Perform image processing operations (e.g., thresholding, contour extraction, etc.)
+    # Convert the image to binary using thresholding
+    _, binary_image = cv2.threshold(mask_image, 127, 255, cv2.THRESH_BINARY)
+    
+    # Find contours in the binary image
+    contours, _ = cv2.findContours(binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    
+    # Proceed if at least one contour is found
+    if len(contours) > 0:
+        num_slices_with_hemorrhage = num_slices_with_hemorrhage + 1
+        # Find the largest contour
+        largest_contour = max(contours, key=cv2.contourArea)
+        
+        # Fit an ellipse to the largest contour
+        (x, y), (a, b), angle = cv2.fitEllipse(largest_contour)
+        A.append(a)
+        B.append(b)
+ 
+
+
+       
+print('NSlices with Hemorrhage:', num_slices_with_hemorrhage)        
+a = max(A)*pixel_size
+print("a:", a)
+b =  max(B)*pixel_size
+
+# Loop through the files in the folder
+for file_name in files:
+    # Read the mask image
+    image_path = os.path.join(folder_path, file_name)
+    mask_image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+    
+    # Perform image processing operations (e.g., thresholding, contour extraction, etc.)
+    # Convert the image to binary using thresholding
+    _, binary_image = cv2.threshold(mask_image, 127, 255, cv2.THRESH_BINARY)
+    
+    # Find contours in the binary image
+    contours, _ = cv2.findContours(binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    
+    # Proceed if at least one contour is found
+    if len(contours) > 0:
+        # Find the largest contour
+        largest_contour = max(contours, key=cv2.contourArea)
+        
+        # Fit an ellipse to the largest contour
+        (x, y), (aa, bb), angle = cv2.fitEllipse(largest_contour)
+        if aa*pixel_size > 0.75 * a:
+            C += 1
+        elif 0.25 * a < aa*pixel_size <= 0.75 * a:
+            C += 0.5
+        # Otherwise, the slice is not considered a hemorrhage slice and is not added to C
+        
+
+C *= slice_thickness
+
+print("c:", C)
+# Calculate the ICH volume
+ich_volume = calculate_ich_volume(a, b, C)
+        
+     
+print("ICH Volume:", ich_volume, "mm^3")
+print("ICH Volume:", ich_volume/1000, "cm^3")
+
+-------------------------------------------------------------
+
+
+------------------------------------
+
+python plot.py --fname=data.csv --minlimit=0 --maxlimit=100 --var1="A" --var2="B"
+
+
+---------------------------------
